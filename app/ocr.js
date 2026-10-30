@@ -326,6 +326,7 @@
               out.mm.b = (e.y1 - e.y0) * k;
               out.mm.cr = (e.rMax - e.rMin) * k;
               out.mm.ct = (e.tMax - e.tMin) * k;
+              out.mm.m = (e.tMin - e.rMin) * k;
               out.pointsMm = out.points.map(function (q) { return [q[0] * k, q[1] * k]; });
             }
           } else if (f.cr !== undefined || f.ct !== undefined || f.b !== undefined) {
@@ -335,6 +336,7 @@
             if (f.b !== undefined) out.mm.b = f.b * k;
             if (out.mm.cr > 0 && out.mm.ct >= 0 && out.mm.b > 0 && f.sweep !== undefined) {
               var s = f.sweep * k;
+              out.mm.m = s;
               out.pointsMm = [[0, 0], [s, out.mm.b], [s + out.mm.ct, out.mm.b], [out.mm.cr, 0]];
             }
           } else if (f.t !== undefined) {

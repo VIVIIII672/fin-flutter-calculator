@@ -28,10 +28,11 @@
       cr: (e.rMax - e.rMin) * k,
       ct: (e.tMax - e.tMin) * k,
       b: (e.y1 - e.y0) * k,
+      m: (e.tMin - e.rMin) * k,
       pointsMm: pts.map(function (q) { return [q[0] * k, q[1] * k]; })
     };
     if (thickness > 0) g.t = thickness;
-    window.FinCalc.apply(g);
+    window.FinApp.applyGeometry({ r_mm: g.cr, c_mm: g.ct, b_mm: g.b, m_mm: g.m, t_mm: thickness > 0 ? thickness : undefined, pointsMm: g.pointsMm });
     return g;
   }
 
@@ -74,7 +75,7 @@
       if (r.kind === 'freeform' && r.pointsMm) {
         var g = applyPoints(r.points, unit, r.mm.t);
         if (!g || !(g.cr > 0) || !(g.b > 0)) { setStatus('讀到座標表，但算不出有效的鰭片尺寸，請確認截圖包含完整的座標表。', 'bad'); return; }
-        lines.push('已讀取 Freeform 座標表（' + r.points.length + ' 個頂點）：根部弦長 ' + fmt(g.cr) + ' mm、尖端弦長 ' + fmt(g.ct) + ' mm、翼展 ' + fmt(g.b) + ' mm。');
+        lines.push('已讀取 Freeform 座標表（' + r.points.length + ' 個頂點）：根部弦長 ' + fmt(g.cr) + ' mm、尖端弦長 ' + fmt(g.ct) + ' mm、翼展 ' + fmt(g.b) + ' mm、前緣後退 ' + fmt(g.m) + ' mm。');
         showPoints(r.points, unit);
         if (!(g.ct > 0)) lines.push('尖端弦長為 0。如果鰭片不是三角形，代表漏讀了頂點，請在下方補正。');
         if (r.points.length < 4) lines.push('只讀到 ' + r.points.length + ' 個頂點，一般梯形鰭片有 4 個，請對照截圖確認有沒有漏列。');
@@ -84,20 +85,18 @@
           setStatus('只讀到部分欄位（' + Object.keys(r.fields).join('、') + '），請確認截圖包含 Root chord、Tip chord、Height。', 'bad');
           return;
         }
-        var g2 = { cr: m.cr, ct: m.ct, b: m.b, t: m.t };
-        if (r.pointsMm) g2.pointsMm = r.pointsMm;
-        window.FinCalc.apply(g2);
+        window.FinApp.applyGeometry({ r_mm: m.cr, c_mm: m.ct, b_mm: m.b, m_mm: m.m, t_mm: m.t, pointsMm: r.pointsMm });
         lines.push('已讀取 Trapezoidal 欄位：根部弦長 ' + fmt(m.cr) + ' mm、尖端弦長 ' + fmt(m.ct) + ' mm、翼展 ' + fmt(m.b) + ' mm' +
           (m.t > 0 ? '、厚度 ' + fmt(m.t) + ' mm。' : '。'));
       } else if (r.kind === 'thickness') {
-        window.FinCalc.apply({ t: r.mm.t });
+        window.FinApp.applyGeometry({ t_mm: r.mm.t });
         lines.push('只讀到厚度 ' + fmt(r.mm.t) + ' mm，已填入。尺寸請另外上傳 Shape 或 General 分頁的截圖。');
       } else {
         setStatus('在這張圖裡找不到鰭片的尺寸欄位或座標表。請上傳 OpenRocket 的鰭片設定視窗截圖（需包含欄位名稱）。', 'bad');
         return;
       }
-      if (r.kind !== 'thickness' && !(r.mm.t > 0)) lines.push('這張截圖沒有厚度，厚度維持 ' + window.FinCalc.get('t') + ' mm。厚度在 General 分頁，可再上傳一張。');
-      lines.push('材料與剪切模量不會從截圖讀取，G 維持 ' + window.FinCalc.get('G') + ' GPa，請自行確認。');
+      if (r.kind !== 'thickness' && !(r.mm.t > 0)) lines.push('這張截圖沒有厚度，厚度維持 ' + fmt(window.FinApp.getThickness()) + ' mm。厚度在 General 分頁，可再上傳一張。');
+      lines.push('材料與剪切模量不會從截圖讀取，G 維持 ' + fmt(window.FinApp.getG()) + ' GPa，請自行確認。');
       lines.push('請核對上面的數字與截圖一致。');
       setStatus(lines.join('\n'), 'ok');
     }).catch(function (err) {

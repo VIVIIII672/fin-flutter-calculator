@@ -6,297 +6,142 @@
 <meta name="color-scheme" content="light dark">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'self'">
 <title>鰭片顫振計算器</title>
-<style>
-/* Layout: 左側為輸入面板，右側為即時結果（判定、速度尺、建議值、材料比較、計算過程）；窄螢幕上下堆疊 */
-:root {
-  --bg: #edf0f4;
-  --surface: #ffffff;
-  --surface-2: #f4f6f9;
-  --fg: #142030;
-  --muted: #566478;
-  --line: #d3dae3;
-  --accent: #1f4fd1;
-  --accent-fg: #ffffff;
-  --ok: #17794a;
-  --ok-bg: #dff3e8;
-  --warn: #8a5a00;
-  --warn-bg: #fbefd2;
-  --bad: #b3261e;
-  --bad-bg: #fbe4e1;
-  --display: "Bahnschrift", "Arial Narrow", "Microsoft JhengHei", "Noto Sans TC", system-ui, sans-serif;
-  --body: "Segoe UI", "Microsoft JhengHei", "Noto Sans TC", system-ui, sans-serif;
-  --mono: Consolas, "Cascadia Mono", ui-monospace, Menlo, monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0c121a;
-    --surface: #141c26;
-    --surface-2: #101822;
-    --fg: #e6ecf4;
-    --muted: #93a1b5;
-    --line: #26313f;
-    --accent: #7aa2ff;
-    --accent-fg: #0c121a;
-    --ok: #5cd39a;
-    --ok-bg: #12301f;
-    --warn: #f1c25e;
-    --warn-bg: #33270b;
-    --bad: #ff8e84;
-    --bad-bg: #3a1816;
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #0c121a;
-  --surface: #141c26;
-  --surface-2: #101822;
-  --fg: #e6ecf4;
-  --muted: #93a1b5;
-  --line: #26313f;
-  --accent: #7aa2ff;
-  --accent-fg: #0c121a;
-  --ok: #5cd39a;
-  --ok-bg: #12301f;
-  --warn: #f1c25e;
-  --warn-bg: #33270b;
-  --bad: #ff8e84;
-  --bad-bg: #3a1816;
-  color-scheme: dark;
-}
-
-* { box-sizing: border-box; }
-body {
-  background: var(--bg);
-  color: var(--fg);
-  font-family: var(--body);
-  font-size: 15px;
-  line-height: 1.55;
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
-  padding-block: 28px 40px;
-}
-.wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
-
-header { display: flex; flex-direction: column; gap: 6px; }
-.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
-h1 { margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; text-wrap: balance; }
-.lede { margin: 0; color: var(--muted); max-width: 62ch; }
-
-.grid { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 20px; align-items: start; }
-.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.panel h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.field.wide { grid-column: 1 / -1; }
-.field label { font-size: 13px; color: var(--muted); }
-.field label b { font-family: var(--mono); font-weight: 500; color: var(--fg); }
-.inp { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); min-width: 0; }
-.inp:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
-.inp input, .inp select { flex: 1; min-width: 0; width: 100%; border: 0; background: transparent; color: var(--fg); font-family: var(--mono); font-size: 15px; padding: 8px 10px; }
-.inp select { font-family: var(--body); }
-.inp input:focus, .inp select:focus { outline: none; }
-.inp .unit { padding: 0 10px 0 0; color: var(--muted); font-family: var(--mono); font-size: 13px; white-space: nowrap; }
-.hint { margin: 0; font-size: 12.5px; color: var(--muted); }
-
-.verdict { border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 10px; border: 1px solid transparent; }
-.verdict.ok { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
-.verdict.tight { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
-.verdict.bad { background: var(--bad-bg); color: var(--bad); border-color: var(--bad); }
-.verdict .top { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
-.pill { font-weight: 700; font-size: 14px; padding: 2px 12px; border-radius: 999px; background: currentColor; }
-.pill span { color: var(--surface); }
-.big { font-family: var(--display); font-weight: 600; font-size: 56px; line-height: 1; letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
-.big small { font-size: 22px; font-weight: 500; margin-left: 6px; }
-.verdict p { margin: 0; color: var(--fg); }
-.verdict .sub { font-family: var(--mono); font-size: 13px; color: var(--muted); }
-
-.bar-wrap { display: flex; flex-direction: column; gap: 8px; }
-.track { position: relative; height: 16px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--line); margin-block: 6px; }
-.fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px 0 0 3px; background: var(--ok); }
-.fill.tight { background: var(--warn); }
-.fill.bad { background: var(--bad); }
-.mk { position: absolute; top: -6px; bottom: -6px; width: 2px; margin-left: -1px; }
-.mk.req { background: var(--fg); }
-.mk.vmax { background: var(--muted); }
-.axis { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 12px; color: var(--muted); }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; }
-.legend span { display: inline-flex; align-items: center; gap: 6px; }
-.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; }
-.legend i.l-fill { background: var(--ok); }
-.legend i.l-fill.tight { background: var(--warn); }
-.legend i.l-fill.bad { background: var(--bad); }
-.legend i.l-req { width: 3px; height: 14px; background: var(--fg); border-radius: 0; }
-.legend i.l-vmax { width: 3px; height: 14px; background: var(--muted); border-radius: 0; }
-.legend b { font-family: var(--mono); font-weight: 500; }
-
-.sugg { display: flex; flex-direction: column; }
-.sugg .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
-.sugg .row:first-child { border-top: 0; padding-top: 0; }
-.sugg .name { font-size: 13px; color: var(--muted); }
-.sugg .val { font-family: var(--mono); font-size: 16px; }
-.sugg .val em { font-style: normal; color: var(--muted); font-size: 13px; }
-.btn { font: inherit; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-fg); cursor: pointer; }
-.btn:hover { filter: brightness(1.08); }
-.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-.tablewrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th { text-align: left; font-weight: 500; font-size: 12.5px; color: var(--muted); padding: 6px 12px 6px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
-td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; white-space: nowrap; }
-td.n, th.n { text-align: right; padding-right: 0; font-family: var(--mono); }
-tr:last-child td { border-bottom: 0; }
-.tag { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; }
-.tag.ok { background: var(--ok-bg); color: var(--ok); }
-.tag.bad { background: var(--bad-bg); color: var(--bad); }
-
-.notes { display: flex; flex-direction: column; gap: 6px; }
-.note { margin: 0; font-size: 13px; padding: 8px 12px; border-radius: 6px; background: var(--warn-bg); color: var(--warn); }
-
-.detail { display: grid; grid-template-columns: minmax(0, 240px) minmax(0, 1fr); gap: 20px; align-items: center; }
-.formula { font-family: var(--mono); font-size: 13.5px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; overflow-x: auto; white-space: nowrap; }
-dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; font-size: 14px; }
-dt { color: var(--muted); }
-dd { margin: 0; font-family: var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
-.fin { fill: var(--accent); fill-opacity: 0.16; stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; }
-.lbl { fill: var(--muted); font-family: var(--mono); font-size: 11px; }
-svg { max-width: 100%; height: auto; display: block; }
-
-.drop { position: relative; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; padding: 16px; border: 1.5px dashed var(--line); border-radius: 8px; background: var(--surface-2); cursor: pointer; }
-.drop:hover, .drop.over { border-color: var(--accent); }
-.drop:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
-.drop.off { cursor: default; opacity: 0.6; }
-.drop.off:hover { border-color: var(--line); }
-.drop-t { font-weight: 600; }
-.drop-s { font-size: 12.5px; color: var(--muted); }
-.sr { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
-.thumb { display: block; max-width: 100%; max-height: 150px; object-fit: contain; border: 1px solid var(--line); border-radius: 6px; align-self: flex-start; }
-.scan-status { margin: 0; font-size: 13px; color: var(--muted); white-space: pre-line; }
-.scan-status.ok { color: var(--ok); }
-.scan-status.bad { color: var(--bad); }
-
-.pts-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.pts-table th { text-align: left; font-weight: 500; color: var(--muted); padding: 4px 8px 4px 0; border-bottom: 1px solid var(--line); }
-.pts-table td { padding: 4px 8px 4px 0; border-bottom: 1px solid var(--line); }
-.pts-table input { width: 100%; min-width: 0; font-family: var(--mono); font-size: 13px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-2); color: var(--fg); }
-.pts-actions { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
-.pts-head { font-size: 13px; color: var(--muted); margin: 0 0 6px; }
-
-@media (max-width: 860px) {
-  .grid { grid-template-columns: minmax(0, 1fr); }
-}
-@media (max-width: 520px) {
-  h1 { font-size: 24px; }
-  .big { font-size: 46px; }
-  .detail { grid-template-columns: minmax(0, 1fr); }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .fill { transition: width 0.25s ease; }
-}
-</style>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-
 <div class="wrap">
   <header>
     <div class="eyebrow">Fin flutter check</div>
     <h1>鰭片顫振計算器</h1>
-    <p class="lede">輸入鰭片尺寸、材料與預期最大速度，立即算出顫振速度。結果不合格時，會直接列出可達標的厚度、翼展與材料。預設數值只是範例，請改成你自己的設計。</p>
+    <p class="lede">輸入鰭片尺寸、材料與飛行條件，算出顫振速度並判定是否達標。可匯入 OpenRocket 的飛行軌跡逐點檢查，或上傳鰭片設定截圖自動填入尺寸。預設數值只是範例，請改成你自己的設計。</p>
+    <div class="toolbar no-print" role="toolbar" aria-label="工具列">
+      <div class="seg" role="group" aria-label="單位系統">
+        <button type="button" id="unitSi" aria-pressed="true">公制</button>
+        <button type="button" id="unitImp" aria-pressed="false">英制</button>
+      </div>
+      <button type="button" class="tb" id="btnSnaps" aria-expanded="false" aria-controls="snapPanel">存檔紀錄</button>
+      <button type="button" class="tb" id="btnExport">匯出 JSON</button>
+      <label class="tb" for="importJson">匯入 JSON</label>
+      <input id="importJson" class="sr" type="file" accept=".json,application/json">
+      <button type="button" class="tb" id="btnPrint">列印</button>
+    </div>
+    <p class="tool-msg" id="toolMsg" aria-live="polite"></p>
+    <section class="panel no-print" id="snapPanel" aria-label="存檔紀錄" hidden>
+      <h2>存檔紀錄（最近 12 筆）</h2>
+      <div class="snap-add">
+        <div class="inp"><input id="snapName" type="text" maxlength="60" placeholder="存檔名稱，例如：5 mm 碳纖維 v2" aria-label="存檔名稱"></div>
+        <button type="button" class="btn" id="btnSnapSave">存檔目前設定</button>
+      </div>
+      <div id="snapList"></div>
+      <p class="hint">存檔會保存所有輸入，但不含飛行軌跡資料。要保存軌跡請用「匯出 JSON」。目前輸入不會自動存檔。</p>
+    </section>
   </header>
 
-  <div class="grid">
-    <div class="col">
-      <section class="panel" aria-label="截圖輸入">
-        <h2>用截圖自動填入</h2>
-        <label class="drop" id="drop" for="shot" tabindex="-1">
-          <input id="shot" class="sr" type="file" accept="image/png,image/jpeg,image/webp,image/bmp">
-          <span class="drop-t">選擇、拖放或按 Ctrl+V 貼上截圖</span>
-          <span class="drop-s">OpenRocket 的鰭片設定視窗：Trapezoidal 的 General 分頁，或 Freeform 的 Shape 分頁（座標表）</span>
-        </label>
-        <div class="fields">
-          <div class="field wide">
-            <label for="unit">截圖上的長度單位</label>
-            <div class="inp">
-              <select id="unit">
-                <option value="cm" selected>cm（OpenRocket 預設）</option>
-                <option value="mm">mm</option>
-                <option value="in">in</option>
-              </select>
+  <div class="tabs no-print" role="tablist" aria-label="功能分頁">
+    <button type="button" class="tab" role="tab" id="t-analysis" data-tab="analysis" aria-selected="true" aria-controls="tab-analysis">顫振分析</button>
+    <button type="button" class="tab" role="tab" id="t-traj" data-tab="traj" aria-selected="false" aria-controls="tab-traj">飛行軌跡</button>
+    <button type="button" class="tab" role="tab" id="t-vortex" data-tab="vortex" aria-selected="false" aria-controls="tab-vortex">渦流與模態</button>
+    <button type="button" class="tab" role="tab" id="t-mass" data-tab="mass" aria-selected="false" aria-controls="tab-mass">安裝與配重</button>
+    <button type="button" class="tab" role="tab" id="t-methods" data-tab="methods" aria-selected="false" aria-controls="tab-methods">方法與來源</button>
+  </div>
+  <p class="print-head" id="printHead"></p>
+
+  <div class="tabpanel" id="tab-analysis" role="tabpanel" aria-labelledby="t-analysis">
+    <div class="grid">
+      <div class="col inputs-col">
+        <section class="panel" aria-label="截圖輸入">
+          <h2>用截圖自動填入</h2>
+          <label class="drop" id="drop" for="shot">
+            <input id="shot" class="sr" type="file" accept="image/png,image/jpeg,image/webp,image/bmp">
+            <span class="drop-t">選擇、拖放或按 Ctrl+V 貼上截圖</span>
+            <span class="drop-s">OpenRocket 的鰭片設定視窗：Trapezoidal 的 General 分頁，或 Freeform 的 Shape 分頁（座標表）</span>
+          </label>
+          <div class="fields">
+            <div class="field wide">
+              <label for="unit">截圖上的長度單位</label>
+              <div class="inp">
+                <select id="unit">
+                  <option value="cm" selected>cm（OpenRocket 預設）</option>
+                  <option value="mm">mm</option>
+                  <option value="in">in</option>
+                </select>
+              </div>
             </div>
           </div>
-        </div>
-        <img id="thumb" class="thumb" alt="已載入的截圖" hidden>
-        <p class="scan-status" id="scanStatus" aria-live="polite">文字辨識在這台電腦上執行，不會上傳任何資料。</p>
-        <div id="scanPts" hidden></div>
-      </section>
-
-      <section class="panel" aria-label="輸入">
-        <h2>鰭片幾何</h2>
-        <div class="fields">
-          <div class="field">
-            <label for="cr">根部弦長 <b>c<sub>r</sub></b></label>
-            <div class="inp"><input id="cr" type="number" inputmode="decimal" step="any" min="0" value="150"><span class="unit">mm</span></div>
-          </div>
-          <div class="field">
-            <label for="ct">尖端弦長 <b>c<sub>t</sub></b></label>
-            <div class="inp"><input id="ct" type="number" inputmode="decimal" step="any" min="0" value="75"><span class="unit">mm</span></div>
-          </div>
-          <div class="field">
-            <label for="b">單片翼展 <b>b</b></label>
-            <div class="inp"><input id="b" type="number" inputmode="decimal" step="any" min="0" value="100"><span class="unit">mm</span></div>
-          </div>
-          <div class="field">
-            <label for="t">鰭片厚度 <b>t</b></label>
-            <div class="inp"><input id="t" type="number" inputmode="decimal" step="any" min="0" value="3"><span class="unit">mm</span></div>
-          </div>
-        </div>
-
-        <h2>材料</h2>
-        <div class="fields">
-          <div class="field wide">
-            <label for="mat">常用材料</label>
-            <div class="inp">
-              <select id="mat">
-                <option value="4.5">玻纖板 G10</option>
-                <option value="17">碳纖維板（準各向同性）</option>
-                <option value="26">鋁 6061-T6</option>
-                <option value="0.7">樺木夾板</option>
-                <option value="custom">自訂</option>
-              </select>
-            </div>
-          </div>
-          <div class="field wide">
-            <label for="G">剪切模量 <b>G</b></label>
-            <div class="inp"><input id="G" type="number" inputmode="decimal" step="any" min="0" value="4.5"><span class="unit">GPa</span></div>
-          </div>
-        </div>
-        <p class="hint">材料數值是典型參考值，實際請以供應商的資料表為準，特別是碳纖維與夾板。</p>
-
-        <h2>飛行條件</h2>
-        <div class="fields">
-          <div class="field">
-            <label for="vmax">預期最大速度 <b>V<sub>max</sub></b></label>
-            <div class="inp"><input id="vmax" type="number" inputmode="decimal" step="any" min="0" value="250"><span class="unit">m/s</span></div>
-          </div>
-          <div class="field">
-            <label for="sf">安全係數</label>
-            <div class="inp"><input id="sf" type="number" inputmode="decimal" step="any" min="0" value="1.5"><span class="unit">×</span></div>
-          </div>
-          <div class="field wide">
-            <label for="alt">最大速度發生的高度</label>
-            <div class="inp"><input id="alt" type="number" inputmode="decimal" step="any" min="0" max="20000" value="0"><span class="unit">m</span></div>
-          </div>
-        </div>
-        <p class="hint">高度越高，顫振速度通常越大，填 0（海平面）最保守。音速 a 與氣壓 P 依標準大氣計算，上限 20,000 m。</p>
-      </section>
+          <img id="thumb" class="thumb" alt="已載入的截圖" hidden>
+          <p class="scan-status" id="scanStatus" aria-live="polite">文字辨識在這台電腦上執行，不會上傳任何資料。</p>
+          <div id="scanPts" hidden></div>
+        </section>
+        <section class="panel"><h2>鰭片幾何</h2><div class="fields" id="f-geom"></div></section>
+        <section class="panel"><h2>材料</h2><div class="fields" id="f-mat"></div></section>
+        <section class="panel"><h2>計算方法</h2><div class="fields" id="f-method"></div></section>
+        <section class="panel"><h2>飛行條件</h2><div class="fields" id="f-flight"></div></section>
+      </div>
+      <div class="col" id="out-analysis" aria-live="polite"></div>
     </div>
+  </div>
 
-    <div class="col" id="out" aria-live="polite"></div>
+  <div class="tabpanel" id="tab-traj" role="tabpanel" aria-labelledby="t-traj" hidden>
+    <div class="grid">
+      <div class="col inputs-col">
+        <section class="panel">
+          <h2>匯入飛行軌跡</h2>
+          <label class="drop" id="trajDrop" for="trajFile">
+            <input id="trajFile" class="sr" type="file" accept=".csv,text/csv,text/plain">
+            <span class="drop-t">選擇或拖放 CSV 檔</span>
+            <span class="drop-s">OpenRocket 的 Plot / Export 匯出檔，需有 Time、Altitude、Total velocity 欄位</span>
+          </label>
+          <p class="scan-status" id="trajStatus" aria-live="polite"></p>
+          <p class="hint">高度視為離地高度（發射場以上）。速度請用對空氣的速度，有風時要自行修正。材料、方法與大氣設定使用「顫振分析」分頁的輸入。</p>
+          <div class="pts-actions"><button type="button" class="btn" id="btnTrajClear" hidden>移除軌跡</button></div>
+        </section>
+      </div>
+      <div class="col" id="out-traj" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <div class="tabpanel" id="tab-vortex" role="tabpanel" aria-labelledby="t-vortex" hidden>
+    <div class="grid">
+      <div class="col inputs-col">
+        <section class="panel"><h2>渦流條件</h2><div class="fields" id="f-vortex"></div>
+          <p class="hint">預設的 St = 0.2 與特徵長度只是示意，不是鰭片的實測關聯式。特徵長度要依你所採用的關聯式定義填寫。</p></section>
+        <section class="panel"><h2>結構模態頻率</h2>
+          <div class="modes" id="modeList"></div>
+          <div class="pts-actions"><button type="button" class="btn" id="btnAddMode">新增模態</button></div>
+          <p class="hint">模態頻率應來自含安裝柔度的組裝件有限元素分析或實測。這個工具不會由鰭片尺寸推算。</p>
+        </section>
+        <section class="panel"><h2>單自由度估算（選填）</h2><div class="fields" id="f-sdof"></div>
+          <div id="sdofOut"></div></section>
+      </div>
+      <div class="col" id="out-vortex" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <div class="tabpanel" id="tab-mass" role="tabpanel" aria-labelledby="t-mass" hidden>
+    <div class="grid">
+      <div class="col inputs-col">
+        <section class="panel"><h2>鰭片組質量</h2><div class="fields" id="f-mass1"></div></section>
+        <section class="panel"><h2>基準與穩定性</h2><div class="fields" id="f-mass2"></div>
+          <p class="hint">位置以同一個基準點起算，往後為正。CP 要由 OpenRocket 等工具另外取得。</p></section>
+        <section class="panel"><h2>載荷</h2><div class="fields" id="f-mass3"></div></section>
+        <section class="panel"><h2>安裝與載荷路徑說明</h2>
+          <textarea id="massNote" class="note-in" maxlength="4000" aria-label="安裝與載荷路徑說明" placeholder="例如：鰭片以貫穿式鰭根插入電子艙壁，兩側環氧樹脂圓角，外層碳纖維包覆。"></textarea></section>
+      </div>
+      <div class="col" id="out-mass" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <div class="tabpanel" id="tab-methods" role="tabpanel" aria-labelledby="t-methods" hidden>
+    <section class="panel"><div class="prose" id="methodsText"></div></section>
   </div>
 </div>
 
-<script src="calc.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/units.js"></script>
+<script src="js/csv.js"></script>
+<script src="js/state.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
 <script src="vendor/tesseract.min.js"></script>
 <script src="ocr.js"></script>
 <script src="scan.js"></script>

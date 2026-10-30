@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, Menu, shell } = require('electron');
+const { app, BrowserWindow, Menu, shell, ipcMain } = require('electron');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -40,6 +40,21 @@ function startServer() {
 
 let server = null;
 
+// 存檔放在使用者資料夾的 JSON 檔（本機伺服器的連接埠每次不同，localStorage 會遺失）
+const STORE_KEYS = new Set(['snapshots', 'prefs']);
+function storeFile() { return path.join(app.getPath('userData'), 'store.json'); }
+function readStore() {
+  try { const o = JSON.parse(fs.readFileSync(storeFile(), 'utf8')); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; }
+}
+ipcMain.handle('store:get', (_e, key) => (STORE_KEYS.has(key) ? (readStore()[key] ?? null) : null));
+ipcMain.handle('store:set', (_e, key, value) => {
+  if (!STORE_KEYS.has(key)) throw new Error('unknown key');
+  const o = readStore(); o[key] = value;
+  fs.mkdirSync(path.dirname(storeFile()), { recursive: true });
+  fs.writeFileSync(storeFile(), JSON.stringify(o));
+  return true;
+});
+
 async function createWindow() {
   server = await startServer();
   const port = server.address().port;
@@ -50,7 +65,7 @@ async function createWindow() {
     minHeight: 600,
     title: '鰭片顫振計算器',
     autoHideMenuBar: true,
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true }
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(__dirname, 'preload.js') }
   });
   Menu.setApplicationMenu(null);
   win.webContents.setWindowOpenHandler(({ url }) => {
