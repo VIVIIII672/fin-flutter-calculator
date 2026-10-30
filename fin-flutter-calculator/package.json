@@ -1,0 +1,50 @@
+{
+  "name": "fin-flutter-calculator",
+  "version": "1.1.0",
+  "description": "鰭片顫振速度計算器：輸入尺寸與材料，或上傳 OpenRocket 截圖自動填入，離線使用。",
+  "main": "main.js",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test tests/physics.test.js",
+    "prepare-vendor": "node scripts/copy-vendor.js",
+    "start": "npm run prepare-vendor && electron .",
+    "dist": "npm run prepare-vendor && electron-builder --win portable nsis --publish never"
+  },
+  "devDependencies": {
+    "@tesseract.js-data/eng": "^1.0.0",
+    "electron": "^45.1.0",
+    "electron-builder": "^26.18.0",
+    "tesseract.js": "5.1.1"
+  },
+  "build": {
+    "appId": "io.github.finflutter.calculator",
+    "productName": "FinFlutterCalculator",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "app/**/*"
+    ],
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    },
+    "portable": {
+      "artifactName": "FinFlutterCalculator-${version}-portable.exe"
+    },
+    "nsis": {
+      "artifactName": "FinFlutterCalculator-${version}-setup.exe",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "author": "fin-flutter-calculator contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OWNER/fin-flutter-calculator.git"
+  }
+}
