@@ -146,6 +146,26 @@
   }
   function singleDof(k_Npm, m_g) { return Math.sqrt(k_Npm / (m_g / 1000)) / (2 * Math.PI); }
 
+  // ---------- 溫度 ----------
+  // 絕熱壁溫（上限估計）：T_aw = T (1 + r (γ-1)/2 M²)，r 為恢復係數（紊流約 0.89，層流約 0.85）
+  function adiabaticWallT(T_K, mach, r) { r = r === undefined ? 0.89 : r; return T_K * (1 + r * (C.gamma - 1) / 2 * mach * mach); }
+  // G 的溫度折減：每高於 20 °C 的 100 °C 損失 kLossPct %，最低保留 5%
+  function gTempFactor(T_C, kLossPct) {
+    var f = 1 - (kLossPct / 100) * Math.max(0, T_C - 20) / 100;
+    return Math.max(0.05, Math.min(1, f));
+  }
+  // 線性內插，不外推；回傳 { v, clamped }
+  function interp(table, x) {
+    var n = table.length;
+    if (x <= table[0][0]) return { v: table[0][1], clamped: x < table[0][0] };
+    if (x >= table[n - 1][0]) return { v: table[n - 1][1], clamped: x > table[n - 1][0] };
+    for (var i = 1; i < n; i++) if (x <= table[i][0]) {
+      var a = table[i - 1], b = table[i], w = (x - a[0]) / (b[0] - a[0]);
+      return { v: a[1] + w * (b[1] - a[1]), clamped: false };
+    }
+    return { v: table[n - 1][1], clamped: false };
+  }
+
   // ---------- 安裝與配重 ----------
   // ms: { fins, density_gcc, addMass_g, assemblyX_mm, baseM_g, baseX_mm, cp_mm, od_mm, Cn, lever_mm }
   function massStudy(geom, ms, q_Pa) {
@@ -200,6 +220,6 @@
     planform: planform, flutter: flutter, validateGeometry: validateGeometry,
     evaluatePoint: evaluatePoint, evaluateTrajectory: evaluateTrajectory,
     strouhal: strouhal, crossingSpeed: crossingSpeed, modeBand: modeBand, singleDof: singleDof,
-    massStudy: massStudy, suggestions: suggestions
+    massStudy: massStudy, suggestions: suggestions, adiabaticWallT: adiabaticWallT, gTempFactor: gTempFactor, interp: interp
   };
 });

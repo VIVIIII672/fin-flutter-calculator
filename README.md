@@ -29,7 +29,12 @@
 - **飛行軌跡**：匯入 OpenRocket 匯出的 CSV（Time、Altitude、Total velocity），逐點計算並找出 G 下限時的最小餘量與最大動壓，可匯出評估結果 CSV。
 - **渦流與模態**：Strouhal 渦流脫落頻率、結構模態頻帶與相交速度、單自由度頻率估算。這是篩選，不是顫振預測。
 - **安裝與配重**：鰭片質量、合成重心、靜態餘裕、法向力與根部力矩。
+- **與 Ansys 比對**：把實驗室 Ansys（流固耦合）或實測的顫振速度記成案例，看三種公式哪個最接近、是否偏樂觀。程式不會自動用比值修正結果。
 - **方法與來源**：所有公式、假設與不處理的項目。
+- **OpenRocket 檔案**：直接讀 `.ork`（鰭片尺寸、片數、材料、已儲存的模擬結果），一次檢查專案內所有鰭片組。材料只有名稱與密度，G 由名稱對照表給典型值，僅供參考。
+- **預設以三種公式中最低的結果判定**；跨音速（Mach 0.8 到 1.2）會標示公式最不可靠的區間。
+- **參數掃描**（厚度、翼展）、**氣動加熱估算**與鰭片溫度對 G 的折減、**報告匯出**（HTML，可列印成 PDF）。
+- **匯入 Ansys 結果**：Mechanical 的模態頻率表、Fluent 的 Cn 對 Mach 係數表（內插）。
 - 公制／英制切換、發射場海拔與當地大氣（氣溫、測站氣壓）、12 筆存檔、JSON 匯出入、列印。輸入有誤時結果會暫停並指出哪個欄位有問題。
 
 部分功能的構想參考自 [STAR-fin-flutter-calculator](https://github.com/andyliuduoduo/STAR-fin-flutter-calculator)；本專案的程式碼為獨立撰寫，沒有使用該專案的程式碼。
@@ -71,8 +76,8 @@ npm run dist     # 打包成 .exe（需在 Windows 上執行），輸出到 dist
 推上 GitHub 後，用版本標籤觸發自動打包：
 
 ```bash
-git tag v1.1.0
-git push origin v1.1.0
+git tag v1.2.0
+git push origin v1.2.0
 ```
 
 GitHub Actions 會在 Windows 上建置，並把 `.exe` 附到 Releases。也可以在 Actions 頁面手動執行 `Build Windows app`，建置結果會出現在該次執行的 Artifacts。

@@ -24,6 +24,7 @@
       <label class="tb" for="importJson">匯入 JSON</label>
       <input id="importJson" class="sr" type="file" accept=".json,application/json">
       <button type="button" class="tb" id="btnPrint">列印</button>
+      <button type="button" class="tb" id="btnReport">匯出報告</button>
     </div>
     <p class="tool-msg" id="toolMsg" aria-live="polite"></p>
     <section class="panel no-print" id="snapPanel" aria-label="存檔紀錄" hidden>
@@ -41,6 +42,7 @@
     <button type="button" class="tab" role="tab" id="t-analysis" data-tab="analysis" aria-selected="true" aria-controls="tab-analysis">顫振分析</button>
     <button type="button" class="tab" role="tab" id="t-traj" data-tab="traj" aria-selected="false" aria-controls="tab-traj">飛行軌跡</button>
     <button type="button" class="tab" role="tab" id="t-vortex" data-tab="vortex" aria-selected="false" aria-controls="tab-vortex">渦流與模態</button>
+    <button type="button" class="tab" role="tab" id="t-cal" data-tab="cal" aria-selected="false" aria-controls="tab-cal">與 Ansys 比對</button>
     <button type="button" class="tab" role="tab" id="t-mass" data-tab="mass" aria-selected="false" aria-controls="tab-mass">安裝與配重</button>
     <button type="button" class="tab" role="tab" id="t-methods" data-tab="methods" aria-selected="false" aria-controls="tab-methods">方法與來源</button>
   </div>
@@ -49,6 +51,17 @@
   <div class="tabpanel" id="tab-analysis" role="tabpanel" aria-labelledby="t-analysis">
     <div class="grid">
       <div class="col inputs-col">
+        <section class="panel" aria-label="OpenRocket 檔案">
+          <h2>從 OpenRocket 檔案讀取</h2>
+          <label class="drop" id="orkDrop" for="orkFile">
+            <input id="orkFile" class="sr" type="file" accept=".ork,.xml,.gz,application/xml,text/xml,application/octet-stream">
+            <span class="drop-t">選擇或拖放 .ork 檔</span>
+            <span class="drop-s">讀取鰭片尺寸、片數、材料，以及檔案裡已儲存的模擬結果。在這台電腦上解析，不會上傳。</span>
+          </label>
+          <p class="scan-status" id="orkStatus" aria-live="polite"></p>
+          <div id="orkList"></div>
+          <div id="orkSims"></div>
+        </section>
         <section class="panel" aria-label="截圖輸入">
           <h2>用截圖自動填入</h2>
           <label class="drop" id="drop" for="shot">
@@ -76,6 +89,8 @@
         <section class="panel"><h2>材料</h2><div class="fields" id="f-mat"></div></section>
         <section class="panel"><h2>計算方法</h2><div class="fields" id="f-method"></div></section>
         <section class="panel"><h2>飛行條件</h2><div class="fields" id="f-flight"></div></section>
+        <section class="panel"><h2>鰭片溫度（選填）</h2><div class="fields" id="f-thermal"></div>
+          <p class="hint">留空表示不修正。填入溫度後，G 會依「每升高 100 °C 的損失」折減。損失率只是粗略的預設，請換成你的材料資料。</p></section>
       </div>
       <div class="col" id="out-analysis" aria-live="polite"></div>
     </div>
@@ -109,6 +124,11 @@
           <div class="modes" id="modeList"></div>
           <div class="pts-actions"><button type="button" class="btn" id="btnAddMode">新增模態</button></div>
           <p class="hint">模態頻率應來自含安裝柔度的組裝件有限元素分析或實測。這個工具不會由鰭片尺寸推算。</p>
+          <div class="field wide"><label for="modeText">貼上 Ansys Mechanical 的頻率表</label>
+            <textarea id="modeText" class="note-in" rows="4" maxlength="20000" placeholder="每行一個頻率，或「模態編號  頻率」兩欄，例如：&#10;1  125.3&#10;2  480.1"></textarea></div>
+          <div class="pts-actions"><button type="button" class="btn" id="btnModeImport">加入清單</button>
+            <label class="btn" for="modeFile">讀取檔案</label><input id="modeFile" class="sr" type="file" accept=".csv,.txt,text/plain,text/csv"></div>
+          <p class="scan-status" id="modeStatus" aria-live="polite"></p>
         </section>
         <section class="panel"><h2>單自由度估算（選填）</h2><div class="fields" id="f-sdof"></div>
           <div id="sdofOut"></div></section>
@@ -123,11 +143,35 @@
         <section class="panel"><h2>鰭片組質量</h2><div class="fields" id="f-mass1"></div></section>
         <section class="panel"><h2>基準與穩定性</h2><div class="fields" id="f-mass2"></div>
           <p class="hint">位置以同一個基準點起算，往後為正。CP 要由 OpenRocket 等工具另外取得。</p></section>
-        <section class="panel"><h2>載荷</h2><div class="fields" id="f-mass3"></div></section>
+        <section class="panel"><h2>載荷</h2><div class="fields" id="f-mass3"></div>
+          <label class="drop" id="cnDrop" for="cnFile">
+            <input id="cnFile" class="sr" type="file" accept=".csv,.txt,text/plain,text/csv">
+            <span class="drop-t">匯入法向力係數表（Mach, Cn）</span>
+            <span class="drop-s">例如 Fluent 算出的結果。有表格時，Cn 依 Mach 內插，取代上面的固定值。</span>
+          </label>
+          <p class="scan-status" id="cnStatus" aria-live="polite"></p>
+          <div class="pts-actions"><button type="button" class="btn" id="btnCnClear" hidden>移除係數表</button></div></section>
         <section class="panel"><h2>安裝與載荷路徑說明</h2>
           <textarea id="massNote" class="note-in" maxlength="4000" aria-label="安裝與載荷路徑說明" placeholder="例如：鰭片以貫穿式鰭根插入電子艙壁，兩側環氧樹脂圓角，外層碳纖維包覆。"></textarea></section>
       </div>
       <div class="col" id="out-mass" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <div class="tabpanel" id="tab-cal" role="tabpanel" aria-labelledby="t-cal" hidden>
+    <div class="grid">
+      <div class="col inputs-col">
+        <section class="panel"><h2>加入比對案例</h2>
+          <div class="fields">
+            <div class="field wide"><label for="calName">案例名稱</label><div class="inp"><input id="calName" type="text" maxlength="60" placeholder="例如：Ansys FSI，5 mm 碳纖維"></div></div>
+            <div class="field wide"><label for="calVref">參考的顫振速度（Ansys 或實測）</label><div class="inp"><input id="calVref" type="number" step="any" inputmode="decimal"><span class="unit" id="u-calVref"></span></div></div>
+          </div>
+          <div class="pts-actions"><button type="button" class="btn" id="btnCalAdd">用目前的設計加入</button></div>
+          <p class="hint">會記下目前的尺寸、G、高度與大氣設定。請確保參考值的條件（高度、溫度、G）與這些設定一致。</p>
+          <div id="calList"></div>
+        </section>
+      </div>
+      <div class="col" id="out-cal" aria-live="polite"></div>
     </div>
   </div>
 
@@ -141,6 +185,7 @@
 <script src="js/csv.js"></script>
 <script src="js/state.js"></script>
 <script src="js/charts.js"></script>
+<script src="js/ork.js"></script>
 <script src="js/app.js"></script>
 <script src="vendor/tesseract.min.js"></script>
 <script src="ocr.js"></script>

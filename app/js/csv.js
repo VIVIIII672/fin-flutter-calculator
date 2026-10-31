@@ -111,5 +111,46 @@
     return out.join('\r\n') + '\r\n';
   }
 
-  return { parse: parse, evaluatedCsv: evaluatedCsv, MAX_ROWS: MAX_ROWS, MAX_CHARS: MAX_CHARS };
+  // ---- 匯入 Ansys 的模態頻率與 Fluent 的係數表 ----
+  var NUM_G = /[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g;
+  function numbersIn(line) {
+    // 去掉括號內的單位，例如 "Frequency [Hz]"
+    var clean = line.replace(/\[[^\]]*\]|\([^)]*\)/g, ' ');
+    var m = clean.match(NUM_G) || [], rest = clean.replace(NUM_G, '').replace(/[\s,;\t.]/g, '');
+    return rest.length > 0 && m.length === 0 ? [] : m.map(parseFloat);
+  }
+  function lines(text) {
+    if (text.length > 200000) throw new Error('文字過長。');
+    return text.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(function (l) { return l && l.charAt(0) !== '#'; });
+  }
+  // 每行最多取一個頻率：有兩個以上數字時取第二個（第一個是模態編號），否則取第一個
+  function parseModes(text) {
+    var out = [];
+    lines(text).forEach(function (l) {
+      var n = numbersIn(l);
+      if (!n.length) return;
+      var f = n.length >= 2 ? n[1] : n[0];
+      if (isFinite(f) && f > 0) out.push(f);
+    });
+    if (!out.length) throw new Error('找不到頻率數字。每行一個頻率，或「模態編號, 頻率」兩欄都可以。');
+    return { freqs: out.slice(0, 12), truncated: out.length > 12 };
+  }
+  // 兩欄（Mach, 係數），其餘欄位忽略；標題行自動略過
+  function parsePairs(text) {
+    var rows = [];
+    lines(text).forEach(function (l) {
+      var n = numbersIn(l);
+      if (n.length >= 2 && isFinite(n[0]) && isFinite(n[1])) rows.push([n[0], n[1]]);
+    });
+    if (rows.length < 2) throw new Error('至少需要 2 列「Mach, 係數」。');
+    if (rows.length > 500) throw new Error('超過 500 列。');
+    rows.sort(function (a, b) { return a[0] - b[0]; });
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i][0] < 0) throw new Error('Mach 不可為負。');
+      if (i && rows[i][0] === rows[i - 1][0]) throw new Error('Mach 有重複的列。');
+    }
+    return rows;
+  }
+
+  return { parseModes: parseModes, parsePairs: parsePairs, parse: parse, evaluatedCsv: evaluatedCsv, MAX_ROWS: MAX_ROWS, MAX_CHARS: MAX_CHARS };
 });
