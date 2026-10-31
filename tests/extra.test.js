@@ -98,3 +98,18 @@ test('state: 材料名稱對照與匯入驗證（比對案例、係數表、溫�
   assert.strictEqual(r.state.cal.length, 1);
   assert.strictEqual(r.state.judge, 'conservative');
 });
+
+test('physics: 剖面等效厚度與根部柔度', () => {
+  assert.strictEqual(P.sectionFactor('flat'), 1);
+  assert.ok(Math.abs(P.sectionFactor('wedge') - Math.cbrt(0.25)) < 1e-12);
+  assert.ok(Math.abs(P.sectionFactor('biconvex') - Math.cbrt(64 * 36 / 5040)) < 1e-12);
+  // 斜削 f=g=0.1：平均立方 = 1 - 0.75*0.2 = 0.85
+  assert.ok(Math.abs(P.sectionFactor('bevel', 0.1, 0.1) - Math.cbrt(0.85)) < 1e-12);
+  assert.ok(Number.isNaN(P.sectionFactor('bevel', 0.8, 0.8)));
+  // 數值積分驗證雙楔形：t(x) 兩側線性到 0
+  let acc = 0, n = 200000; for (let i = 0; i < n; i++) { const x = (i + 0.5) / n, s = x < 0.5 ? 2 * x : 2 * (1 - x); acc += s ** 3 / n; }
+  assert.ok(Math.abs(Math.cbrt(acc) - P.sectionFactor('wedge')) < 1e-6);
+  assert.strictEqual(P.rootStiffnessRatio(null), 1);
+  assert.ok(Math.abs(P.rootStiffnessRatio(1) - 0.5) < 1e-12);
+  assert.ok(P.rootStiffnessRatio(100) > 0.99);
+});

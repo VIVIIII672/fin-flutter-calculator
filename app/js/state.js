@@ -44,6 +44,8 @@
       mat: 'g10', G_GPa: 4.5, Gpct: 30, density_gcc: 1.85,
       method: 'user', judge: 'conservative',
       thermal: { finT_C: null, kLoss: 10 },
+      adv: { nu: 0.3, model: 'auto' },
+      corr: { sect: 'flat', bevelLE_pct: 0, bevelTE_pct: 0, rootK: null },
       cal: [],
       flight: { vmax: 250, sf: 1.5, aglMax_m: 0, mode: 'std', launchElev_m: 0, launchT_C: 15, stationP_Pa: 101325 },
       traj: null,
@@ -75,6 +77,9 @@
     takeNum(st, raw, 'G_GPa'); takeNum(st, raw, 'Gpct'); takeNum(st, raw, 'density_gcc');
     takeEnum(st, raw, 'method', ['user', 'martin', 'bennett']);
     takeEnum(st, raw, 'judge', ['conservative', 'selected']);
+    takeEnum(st.corr, raw.corr, 'sect', ['flat', 'bevel', 'wedge', 'biconvex']);
+    takeNum(st.corr, raw.corr, 'bevelLE_pct'); takeNum(st.corr, raw.corr, 'bevelTE_pct'); takeNum(st.corr, raw.corr, 'rootK', true);
+    takeNum(st.adv, raw.adv, 'nu'); takeEnum(st.adv, raw.adv, 'model', ['auto', 'subsonic', 'piston']);
     takeNum(st.thermal, raw.thermal, 'kLoss'); takeNum(st.thermal, raw.thermal, 'finT_C', true);
     if (raw.mass && Array.isArray(raw.mass.cnTable) && raw.mass.cnTable.length >= 2 && raw.mass.cnTable.length <= 500 &&
         raw.mass.cnTable.every(function (q) { return Array.isArray(q) && isNum(q[0]) && isNum(q[1]) && q[0] >= 0; })) {

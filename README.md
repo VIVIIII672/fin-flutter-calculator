@@ -76,8 +76,8 @@ npm run dist     # 打包成 .exe（需在 Windows 上執行），輸出到 dist
 推上 GitHub 後，用版本標籤觸發自動打包：
 
 ```bash
-git tag v1.2.0
-git push origin v1.2.0
+git tag v1.3.0
+git push origin v1.3.0
 ```
 
 GitHub Actions 會在 Windows 上建置，並把 `.exe` 附到 Releases。也可以在 Actions 頁面手動執行 `Build Windows app`，建置結果會出現在該次執行的 Artifacts。
@@ -85,3 +85,8 @@ GitHub Actions 會在 Windows 上建置，並把 `.exe` 附到 Releases。也可
 ## 授權
 
 MIT。使用的第三方元件：Electron（MIT）、Tesseract.js 與 Tesseract 英文語言資料（Apache-2.0）。
+
+## v1.3.0 新增
+- **外形修正**：翼剖面／斜削的等效厚度、根部安裝柔度（皆為近似，未驗證）。
+- **進階求解器**（實驗）：Rayleigh–Ritz 平板模態＋簡化氣動力的顫振掃描。結構頻率用解析解驗證過；氣動力沒有跨音速效應，結果通常遠高於經驗公式，**不可用來放寬設計**。
+- **OpenRocket 外掛**（`openrocket-plugin/`，實驗）：見該資料夾的 README，對接層尚未編譯。

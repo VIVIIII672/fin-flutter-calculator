@@ -1,11 +1,11 @@
 {
   "name": "fin-flutter-calculator",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "鰭片顫振速度計算器：輸入尺寸與材料，或上傳 OpenRocket 截圖自動填入，離線使用。",
   "main": "main.js",
   "license": "MIT",
   "scripts": {
-    "test": "node --test tests/physics.test.js tests/extra.test.js",
+    "test": "node --test tests/physics.test.js tests/extra.test.js tests/solver.test.js",
     "prepare-vendor": "node scripts/copy-vendor.js",
     "start": "npm run prepare-vendor && electron .",
     "dist": "npm run prepare-vendor && electron-builder --win portable nsis --publish never"

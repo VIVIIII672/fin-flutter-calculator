@@ -42,6 +42,7 @@
     <button type="button" class="tab" role="tab" id="t-analysis" data-tab="analysis" aria-selected="true" aria-controls="tab-analysis">顫振分析</button>
     <button type="button" class="tab" role="tab" id="t-traj" data-tab="traj" aria-selected="false" aria-controls="tab-traj">飛行軌跡</button>
     <button type="button" class="tab" role="tab" id="t-vortex" data-tab="vortex" aria-selected="false" aria-controls="tab-vortex">渦流與模態</button>
+    <button type="button" class="tab" role="tab" id="t-adv" data-tab="adv" aria-selected="false" aria-controls="tab-adv">進階求解器</button>
     <button type="button" class="tab" role="tab" id="t-cal" data-tab="cal" aria-selected="false" aria-controls="tab-cal">與 Ansys 比對</button>
     <button type="button" class="tab" role="tab" id="t-mass" data-tab="mass" aria-selected="false" aria-controls="tab-mass">安裝與配重</button>
     <button type="button" class="tab" role="tab" id="t-methods" data-tab="methods" aria-selected="false" aria-controls="tab-methods">方法與來源</button>
@@ -86,6 +87,8 @@
           <div id="scanPts" hidden></div>
         </section>
         <section class="panel"><h2>鰭片幾何</h2><div class="fields" id="f-geom"></div></section>
+        <section class="panel"><h2>外形與安裝修正（選填）</h2><div class="fields" id="f-corr"></div>
+          <p class="hint">這是工程近似：斜削或翼型剖面以「彎曲剛度等效」的厚度取代，根部柔度用彈簧串聯估算。兩者都沒有經過實驗驗證，預設為不修正。</p></section>
         <section class="panel"><h2>材料</h2><div class="fields" id="f-mat"></div></section>
         <section class="panel"><h2>計算方法</h2><div class="fields" id="f-method"></div></section>
         <section class="panel"><h2>飛行條件</h2><div class="fields" id="f-flight"></div></section>
@@ -158,6 +161,19 @@
     </div>
   </div>
 
+  <div class="tabpanel" id="tab-adv" role="tabpanel" aria-labelledby="t-adv" hidden>
+    <div class="grid">
+      <div class="col inputs-col">
+        <section class="panel"><h2>進階求解器設定</h2><div class="fields" id="f-adv"></div>
+          <div class="pts-actions"><button type="button" class="btn" id="btnAdvRun">執行模態分析與顫振掃描</button></div>
+          <p class="hint">尺寸、G、密度與飛行條件使用「顫振分析」分頁的輸入（尺寸用標稱值，不含剖面與根部柔度修正）。這是實驗性模型：結構部分用解析解驗證過，氣動力部分沒有實驗驗證，結果通常比經驗公式樂觀。</p>
+          <p class="scan-status" id="advStatus" aria-live="polite"></p>
+        </section>
+      </div>
+      <div class="col" id="out-adv" aria-live="polite"></div>
+    </div>
+  </div>
+
   <div class="tabpanel" id="tab-cal" role="tabpanel" aria-labelledby="t-cal" hidden>
     <div class="grid">
       <div class="col inputs-col">
@@ -186,6 +202,7 @@
 <script src="js/state.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/ork.js"></script>
+<script src="js/solver.js"></script>
 <script src="js/app.js"></script>
 <script src="vendor/tesseract.min.js"></script>
 <script src="ocr.js"></script>

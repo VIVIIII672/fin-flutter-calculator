@@ -5,7 +5,8 @@
   var $ = function (id) { return document.getElementById(id); };
   var O = window.FinOrk;
   var state = S.defaults();
-  var ui = { sweep: 't', ork: null };
+  var ui = { sweep: 't', ork: null, adv: null };
+  var SV = window.FinSolver;
   var currentTab = 'analysis';
   var timer = null;
 
@@ -53,6 +54,16 @@
       { type: 'select', path: 'judge', label: '判定依據', wide: true },
       { type: 'select', path: 'method', label: '指定的公式（只在「只用上面選的公式」時使用）', wide: true }
     ],
+    'f-adv': [
+      { path: 'adv.nu', label: '蒲松比 ν', sym: 'ν', dim: 'none', gt: true, max: 0.49, hint: '用來由 G 算出 E = 2G(1+ν)。玻纖約 0.15 到 0.3，鋁約 0.33。' },
+      { type: 'select', path: 'adv.model', label: '氣動力模型', wide: true }
+    ],
+    'f-corr': [
+      { type: 'select', path: 'corr.sect', label: '剖面形狀', wide: true },
+      { path: 'corr.bevelLE_pct', label: '前緣斜削長度（佔弦長）', dim: 'pct', ge: true, max: 45, showIf: function (s) { return s.corr.sect === 'bevel'; } },
+      { path: 'corr.bevelTE_pct', label: '後緣斜削長度（佔弦長）', dim: 'pct', ge: true, max: 45, showIf: function (s) { return s.corr.sect === 'bevel'; } },
+      { path: 'corr.rootK', label: '根部剛度 ÷ 鰭片懸臂剛度', dim: 'none', opt: true, gt: true, wide: true, hint: '留空表示剛性固定。數值越小，根部越軟，顫振速度依 √[k/(1+k)] 折減。可由 FEA 的根部轉動剛度估出。' }
+    ],
     'f-thermal': [
       { path: 'thermal.finT_C', label: '鰭片溫度', dim: 'temp', opt: true, wide: true },
       { path: 'thermal.kLoss', label: 'G 的損失（每升高 100 °C）', dim: 'pct', ge: true, max: 100, wide: true, hint: '預設 10% 只是粗略值，不同材料差很多（環氧樹脂接近玻璃轉移溫度時會急遽下降）。' }
@@ -94,6 +105,8 @@
 
   function selectOptions(path) {
     if (path === 'mat') return S.MATS.map(function (m) { return [m.id, m.name]; }).concat([['custom', '自訂']]);
+    if (path === 'adv.model') return [['auto', '自動（依 Mach 混合）'], ['subsonic', '只用低速模型'], ['piston', '只用活塞理論（Mach ≥ 1.5 才合理）']];
+    if (path === 'corr.sect') return [['flat', '平板（不修正）'], ['bevel', '前後緣斜削'], ['wedge', '雙楔形（中間最厚）'], ['biconvex', '雙凸形（拋物線）']];
     if (path === 'judge') return [['conservative', '最保守（三種公式取最低）'], ['selected', '只用下面指定的公式']];
     if (path === 'method') return Object.keys(P.METHODS).map(function (k) { return [k, k === 'bennett' ? 'Bennett 形心修正（計入前緣後退）' : P.METHODS[k]]; });
     if (path === 'flight.mode') return MODE_OPTS;
@@ -193,18 +206,30 @@
     return errs;
   }
 
+  function tFactor() {
+    var c = state.corr;
+    return P.sectionFactor(c.sect, c.bevelLE_pct / 100, c.bevelTE_pct / 100);
+  }
+  // 等效幾何：厚度換成等效厚度（其餘不變）
+  function effGeom() {
+    var q = tFactor();
+    return isNum(q) && q !== 1 ? Object.assign({}, state.geom, { t_mm: state.geom.t_mm * q }) : state.geom;
+  }
   function effG() {
-    var t = state.thermal;
-    return t && isNum(t.finT_C) ? state.G_GPa * P.gTempFactor(t.finT_C, t.kLoss) : state.G_GPa;
+    var t = state.thermal, G = state.G_GPa;
+    if (t && isNum(t.finT_C)) G *= P.gTempFactor(t.finT_C, t.kLoss);
+    return G * P.rootStiffnessRatio(state.corr.rootK);
   }
   function physState(method) {
-    return { geom: state.geom, G_GPa: effG(), Gpct: state.Gpct, method: method || judgedMethod(), flight: state.flight };
+    return { geom: effGeom(), G_GPa: effG(), Gpct: state.Gpct, method: method || judgedMethod(), flight: state.flight };
   }
 
   function analysisErrors() {
-    var errs = fieldErrors(['f-geom', 'f-mat', 'f-flight', 'f-thermal']);
+    var errs = fieldErrors(['f-geom', 'f-mat', 'f-flight', 'f-thermal', 'f-corr']);
     if (errs.length) return errs;
     var f = state.flight;
+    if (state.corr.sect === 'bevel' && !(state.corr.bevelLE_pct + state.corr.bevelTE_pct < 90)) errs.push({ path: 'corr.bevelLE_pct', msg: '前後緣斜削長度加起來必須小於弦長的 90%' });
+    if (!isNum(tFactor())) errs.push({ path: 'corr.bevelLE_pct', msg: '斜削設定算不出有效的等效厚度' });
     if (f.mode === 'std' && f.launchElev_m + f.aglMax_m > P.STD_LIMIT_M) errs.push({ path: 'flight.aglMax_m', msg: '海拔加高度超過標準大氣模型的上限 ' + fu('altitude', P.STD_LIMIT_M, 0) + ' ' + un('altitude') });
     if (f.mode === 'local' && f.aglMax_m > P.TROPO_LIMIT_M) errs.push({ path: 'flight.aglMax_m', msg: '當地大氣模型只適用於離地 ' + fu('altitude', P.TROPO_LIMIT_M, 0) + ' ' + un('altitude') + ' 以下' });
     if (f.mode === 'local' && !(f.launchT_C > -80 && f.launchT_C < 60)) errs.push({ path: 'flight.launchT_C', msg: '發射場氣溫不在合理範圍' });
@@ -253,7 +278,7 @@
   function judgedMethod() {
     if (state.judge === 'selected') return state.method;
     try {
-      var g = state.geom, fl = state.flight;
+      var g = effGeom(), fl = state.flight;
       if (![g.r_mm, g.c_mm, g.b_mm, g.t_mm, fl.vmax, fl.sf, state.G_GPa].every(isNum)) return state.method;
       var mt = methodTable(g, effG(), fl.vmax * fl.sf);
       return mt.worst ? mt.worst.key : state.method;
@@ -278,9 +303,9 @@
 
   function renderAnalysis() {
     var out = $('out-analysis'), errs = analysisErrors();
-    markInvalid(errs, ['f-geom', 'f-mat', 'f-flight', 'f-thermal']);
+    markInvalid(errs, ['f-geom', 'f-mat', 'f-flight', 'f-thermal', 'f-corr']);
     if (errs.length) { out.innerHTML = pausedBox(errs, '計算'); return; }
-    var fl = state.flight, g = state.geom, Geff = effG();
+    var fl = state.flight, g = effGeom(), gN = state.geom, qT = tFactor(), Geff = effG();
     var req = fl.vmax * fl.sf;
     var mt = methodTable(g, Geff, req), mrows = mt.rows;
     if (!mt.worst) { out.innerHTML = pausedBox([{ msg: '三種公式都無法計算，請檢查尺寸（' + (mrows[0].reason || '') + '）。' }], '計算'); return; }
@@ -304,7 +329,9 @@
     if (g.c_mm > g.r_mm) warns.push('尖端弦長大於根部弦長（λ = ' + fn(pt.f.lam, 2) + '），請確認是否填反。');
     if (g.t_mm / g.r_mm > 0.1) warns.push('厚度與根部弦長的比值 t/c_r = ' + fn(g.t_mm / g.r_mm, 3) + '，鰭片相對偏厚，簡化公式的誤差可能變大。');
     if (state.shape && state.shape.length > 4) warns.push('外形有 ' + state.shape.length + ' 個頂點，計算以梯形近似（根部弦長、尖端弦長、翼展與前緣後退長度）。');
-    if (Geff !== state.G_GPa) warns.push('G 已依鰭片溫度 ' + fu('temp', state.thermal.finT_C, 0) + ' ' + un('temp') + ' 折減為 ' + fu('modulus', Geff, state.units === 'si' ? 2 : 0) + ' ' + un('modulus') + '（原值 ×' + fn(Geff / state.G_GPa, 2) + '）。折減率只是粗略的預設。');
+    if (isNum(state.thermal.finT_C)) warns.push('G 已依鰭片溫度 ' + fu('temp', state.thermal.finT_C, 0) + ' ' + un('temp') + ' 折減（×' + fn(P.gTempFactor(state.thermal.finT_C, state.thermal.kLoss), 2) + '）。折減率只是粗略的預設。');
+    if (qT !== 1) warns.push('剖面修正：等效厚度 = ' + fu('length', g.t_mm, 2) + ' ' + un('length') + '（標稱厚度的 ' + fn(qT, 2) + ' 倍，以彎曲剛度等效）。這是工程近似，沒有實驗驗證，也沒有計入扭轉剛度的變化。');
+    if (isNum(state.corr.rootK)) warns.push('根部柔度修正：Vf ×' + fn(Math.sqrt(P.rootStiffnessRatio(state.corr.rootK)), 2) + '（根部剛度為鰭片的 ' + fn(state.corr.rootK, 2) + ' 倍，彈簧串聯估算）。');
 
     var max = Math.max(Vh, req, fl.vmax) * 1.12, p = function (x) { return (x / max * 100).toFixed(2); };
     var html = '';
@@ -354,7 +381,7 @@
       var btn = function (show, path, val) { return show ? ' <button type="button" class="btn tb-sm" data-set="' + path + '" data-val="' + val + '">套用</button>' : ''; };
       var gd = state.units === 'si' ? 1 : 0;
       html += '<section class="panel"><h2>' + (needN || needL ? '建議調整（任選一項即可達標）' : '設計餘裕（單項調整的極限）') + '</h2><div class="tablewrap"><table><thead><tr><th>項目</th><th class="n">標稱 G</th><th class="n">G 下限</th><th class="n">目前</th></tr></thead><tbody>' +
-        '<tr><td>' + (needN || needL ? '厚度至少' : '厚度最薄可到') + '</td><td class="n">' + fu('length', ceilTo(sN.t_mm, 0.1), 1) + ' ' + un('length') + btn(needN, 'geom.t_mm', ceilTo(sN.t_mm, 0.1)) + '</td><td class="n">' + fu('length', ceilTo(sL.t_mm, 0.1), 1) + ' ' + un('length') + btn(needL, 'geom.t_mm', ceilTo(sL.t_mm, 0.1)) + '</td><td class="n">' + fu('length', g.t_mm, 1) + ' ' + un('length') + '</td></tr>' +
+        '<tr><td>' + (needN || needL ? '厚度至少' : '厚度最薄可到') + '</td><td class="n">' + fu('length', ceilTo(sN.t_mm / qT, 0.1), 1) + ' ' + un('length') + btn(needN, 'geom.t_mm', ceilTo(sN.t_mm / qT, 0.1)) + '</td><td class="n">' + fu('length', ceilTo(sL.t_mm / qT, 0.1), 1) + ' ' + un('length') + btn(needL, 'geom.t_mm', ceilTo(sL.t_mm / qT, 0.1)) + '</td><td class="n">' + fu('length', gN.t_mm, 1) + ' ' + un('length') + '</td></tr>' +
         '<tr><td>' + (needN || needL ? '單片翼展不超過' : '翼展最長可到') + '</td><td class="n">' + bCell(sN) + btn(needN && isFinite(sN.b_mm) && !sN.bCap, 'geom.b_mm', Math.floor(sN.b_mm * 10) / 10) + '</td><td class="n">' + bCell(sL) + btn(needL && isFinite(sL.b_mm) && !sL.bCap, 'geom.b_mm', Math.floor(sL.b_mm * 10) / 10) + '</td><td class="n">' + fu('length', g.b_mm, 1) + ' ' + un('length') + '</td></tr>' +
         '<tr><td>剪切模量至少</td><td class="n">' + fu('modulus', ceilTo(sN.G_GPa, 0.1), gd) + ' ' + un('modulus') + btn(needN, 'G_GPa', ceilTo(sN.G_GPa, 0.1)) + '</td><td class="n">（G 下限需達到）' + fu('modulus', ceilTo(sL.G_GPa, 0.1), gd) + ' ' + un('modulus') + '</td><td class="n">' + fu('modulus', Geff, gd) + ' ' + un('modulus') + '</td></tr>' +
         '</tbody></table></div><p class="hint">每一項都是各自獨立計算，其餘參數保持目前的輸入，數值已朝合格方向進位。用「G 下限」欄可確保材料偏軟時仍達標。</p></section>';
@@ -364,7 +391,7 @@
     html += '<section class="panel"><h2>換材料會怎樣（尺寸不變）</h2><div class="tablewrap"><table><thead><tr><th>材料</th><th class="n">G（' + un('modulus') + '）</th><th class="n">V<sub>f</sub>（' + un('speed') + '）</th><th>判定</th><th class="n">達標最小厚度（' + un('length') + '）</th></tr></thead><tbody>' +
       S.MATS.map(function (m) {
         var r = P.evaluatePoint(Object.assign({}, st, { G_GPa: m.G * (Geff / state.G_GPa), Gpct: 0 }), fl.aglMax_m, fl.vmax), ok = r.Vf.nom >= req;
-        var tmin = g.t_mm * Math.pow(req / r.Vf.nom, 2 / 3);
+        var tmin = gN.t_mm * Math.pow(req / r.Vf.nom, 2 / 3);
         return '<tr><td>' + esc(m.name) + '</td><td class="n">' + fu('modulus', m.G, state.units === 'si' ? 1 : 0) + '</td><td class="n">' + fu('speed', r.Vf.nom, 0) + '</td><td><span class="tag ' + (ok ? 'ok' : 'bad') + '">' + (ok ? '達標' : '不足') + '</span></td><td class="n">' + fu('length', ceilTo(tmin, 0.1), state.units === 'si' ? 1 : 2) + '</td></tr>';
       }).join('') + '</tbody></table></div><p class="hint">G 為各材料的典型參考值。</p></section>';
 
@@ -398,12 +425,12 @@
   }
 
   function sweepPanel(pt, jk, req) {
-    var g = state.geom, fl = state.flight, v = ui.sweep, key = v === 'b' ? 'b_mm' : 't_mm', cur = g[key];
+    var g = effGeom(), qT = tFactor(), fl = state.flight, v = ui.sweep, key = v === 'b' ? 'b_mm' : 't_mm', cur = key === 't_mm' ? state.geom.t_mm : g[key];
     var k = state.units === 'si' ? 1 : 1 / U.constants.FT, lk = state.units === 'si' ? 1 : 1 / U.constants.IN;
     var lo = cur * (v === 'b' ? 0.5 : 0.4), hi = cur * (v === 'b' ? 1.6 : 2.2), N = 30, pts = { low: [], nom: [], high: [], req: [] };
     var Gs = pt.G, atm = pt.atm;
     for (var i = 0; i <= N; i++) {
-      var x = lo + (hi - lo) * i / N, gg = Object.assign({}, g); gg[key] = x;
+      var x = lo + (hi - lo) * i / N, gg = Object.assign({}, g); gg[key] = key === 't_mm' ? x * qT : x;
       var row = {};
       ['low', 'nom', 'high'].forEach(function (w) {
         var r = P.flutter(gg, Gs[w], atm.p, atm.a, jk);
@@ -712,6 +739,63 @@
       '<p>形心修正與渦流篩選的描述，依據公開的 STAR Fin Lab 方法文件整理。本程式的程式碼為獨立撰寫，沒有使用該專案的程式碼。</p>';
   }
 
+  // ================= 分頁：進階求解器 =================
+  function advSig() {
+    return JSON.stringify([state.geom, state.G_GPa, state.thermal, state.density_gcc, state.flight, state.adv]);
+  }
+
+  function runAdv() {
+    var errs = analysisErrors().concat(fieldErrors(['f-adv']));
+    if (errs.length) { setStatusEl('advStatus', '輸入有問題：' + errs[0].msg, 'bad'); return; }
+    if (!SV) { setStatusEl('advStatus', '求解器元件沒有載入。', 'bad'); return; }
+    setStatusEl('advStatus', '計算中…');
+    setTimeout(function () {
+      try {
+        var fl = state.flight, atm = P.atmosphereAt(fl, fl.aglMax_m);
+        var G = state.G_GPa * (isNum(state.thermal.finT_C) ? P.gTempFactor(state.thermal.finT_C, state.thermal.kLoss) : 1);
+        var mat = { G_GPa: G, nu: state.adv.nu, rho_gcc: state.density_gcc };
+        var Umax = Math.min(4000, 8 * atm.a), t0 = Date.now();
+        var r = SV.flutterScan(state.geom, mat, { rho: atm.rho, a: atm.a }, { Umax: Umax, dU: Umax / 400, model: state.adv.model, nx: 6, ny: 7, nModes: 6 });
+        var req = fl.vmax * fl.sf, mt = methodTable(state.geom, effG(), req);
+        ui.adv = { sig: advSig(), r: r, atm: atm, mat: mat, formulaMin: mt.worst ? mt.worst.Vf : NaN, req: req, ms: Date.now() - t0 };
+        setStatusEl('advStatus', '完成（' + ui.adv.ms + ' ms）。', 'ok');
+      } catch (e) { ui.adv = null; setStatusEl('advStatus', '計算失敗：' + (e && e.message ? e.message : e), 'bad'); }
+      renderAdv();
+    }, 20);
+  }
+
+  function renderAdv() {
+    var out = $('out-adv'), a = ui.adv;
+    if (!a) {
+      out.innerHTML = '<section class="panel"><h2>還沒有結果</h2><p class="info">按左側的「執行」，會算出鰭片的前 6 個固有頻率，並在設計點的空氣條件下掃描顫振速度。</p>' +
+        '<p class="hint">模型：Kirchhoff 薄板（等向、均勻厚度、根部固定）的 Rayleigh-Ritz 解，加上壓力正比於局部下洗的簡化氣動力。沒有跨音速效應、沒有翼型、沒有結構阻尼。</p></section>';
+      return;
+    }
+    var r = a.r, stale = a.sig !== advSig(), req = a.req, html = '';
+    if (stale) html += '<div class="notes"><p class="note">輸入已經改變，下面是上一次的結果。請重新執行。</p></div>';
+    html += '<div class="notes"><p class="note">這是實驗性模型。結構頻率用解析解驗證過；氣動力是簡化模型，沒有跨音速效應，通常比經驗公式樂觀。<b>不要因為這裡的顫振速度較高就放寬設計。</b>要驗證請用實驗室的 Ansys 流固耦合。</p></div>';
+    html += '<section class="panel"><h2>固有頻率（根部固定的平板）</h2><div class="tablewrap"><table><thead><tr><th class="n">模態</th><th class="n">頻率（Hz）</th></tr></thead><tbody>' +
+      r.freqs.map(function (f, i) { return '<tr><td class="n">' + (i + 1) + '</td><td class="n">' + fn(f, 1) + '</td></tr>'; }).join('') +
+      '</tbody></table></div><div class="pts-actions no-print"><button type="button" class="btn tb-sm" id="btnAdvModes">加入渦流分頁的模態清單</button></div>' +
+      '<p class="hint">E = ' + fn(a.mat.G_GPa * 2 * (1 + a.mat.nu), 2) + ' GPa（由 G 與 ν 算出）。不含安裝柔度、膠層與包覆層，真實鰭片的頻率通常較低。</p></section>';
+    var kindTxt = r.kind === 'flutter' ? '顫振' : r.kind === 'divergence' ? '靜態發散' : '未發生';
+    var ratio = r.kind === 'none' ? NaN : r.Vf / a.formulaMin;
+    html += '<section class="panel"><h2>顫振掃描</h2><div class="tiles">' +
+      '<div class="tile ' + (r.kind === 'none' ? '' : (r.Vf >= req ? 'ok' : 'bad')) + '"><span class="k">模型預測的不穩定速度</span><span class="v">' + (r.kind === 'none' ? '無' : spd(r.Vf)) + '</span><span class="s">' + (r.kind === 'none' ? '掃描範圍內沒有出現不穩定' : kindTxt + '，Mach ' + fn(r.mach, 2) + '，頻率 ' + fn(r.freq, 0) + ' Hz') + '</span></div>' +
+      '<div class="tile"><span class="k">三種公式中最低</span><span class="v">' + spd(a.formulaMin) + '</span><span class="s">要求速度 ' + spd(req) + '</span></div>' +
+      '<div class="tile"><span class="k">求解器 ÷ 最低公式</span><span class="v">' + (isNum(ratio) ? fn(ratio, 2) : '—') + '</span><span class="s">大於 1 表示求解器比公式樂觀</span></div></div>';
+    var msgs = [];
+    if (r.kind !== 'none' && r.blended) msgs.push('預測的不穩定發生在 Mach 0.9 到 1.5 的混合區間，氣動力在這裡沒有物理依據，結果不可靠。');
+    if (r.kind === 'none' || (isNum(ratio) && ratio > 1.3)) msgs.push('求解器的結果明顯高於（或找不到）經驗公式的預測。這很可能是因為簡化氣動力沒有包含跨音速區的顫振速度下降，不代表設計安全。請以較保守的結果為準。');
+    if (r.kind === 'flutter' && r.Vf < req) msgs.push('求解器預測的速度低於要求速度。');
+    html += msgs.map(function (m) { return '<p class="note">' + esc(m) + '</p>'; }).join('');
+    var pick = r.scan.filter(function (s, i) { return i % Math.max(1, Math.floor(r.scan.length / 10)) === 0; });
+    html += '<div class="tablewrap"><table><thead><tr><th class="n">速度（' + un('speed') + '）</th><th class="n">Mach</th><th class="n">最不穩定根的衰減率（1/s）</th></tr></thead><tbody>' +
+      pick.map(function (s) { return '<tr><td class="n">' + fu('speed', s.U, 0) + '</td><td class="n">' + fn(s.mach, 2) + '</td><td class="n">' + fn(s.maxRe, 1) + '</td></tr>'; }).join('') +
+      '</tbody></table></div><p class="hint">衰減率為負表示穩定，轉為正表示開始不穩定。大氣條件取自設計點（' + fu('altitude', state.flight.aglMax_m, 0) + ' ' + un('altitude') + '離地），密度 ' + fn(a.atm.rho, 3) + ' kg/m³。</p></section>';
+    out.innerHTML = html;
+  }
+
   // ================= 分頁：與 Ansys 比對 =================
   function renderCalList() {
     var box = $('calList');
@@ -778,7 +862,7 @@
     if (errs.length) { toolMsg('目前的輸入有問題，無法加入：' + errs[0].msg, 'bad'); return; }
     if (!(v > 0)) { toolMsg('請先填入參考的顫振速度（大於 0）。', 'bad'); return; }
     if (state.cal.length >= 20) { toolMsg('最多 20 個比對案例。', 'bad'); return; }
-    state.cal.push({ name: $('calName').value.trim().slice(0, 60), geom: S.clone(state.geom), G_GPa: effG(), aglM: state.flight.aglMax_m, flight: S.clone(state.flight), Vref: U.toBase('speed', state.units, v) });
+    state.cal.push({ name: $('calName').value.trim().slice(0, 60), geom: S.clone(effGeom()), G_GPa: effG(), aglM: state.flight.aglMax_m, flight: S.clone(state.flight), Vref: U.toBase('speed', state.units, v) });
     $('calName').value = ''; $('calVref').value = '';
     toolMsg('已加入比對案例。', 'ok');
     renderAll();
@@ -885,6 +969,8 @@
       ['預期最大速度', spd(fl.vmax)], ['安全係數', fn(fl.sf, 2)], ['最大速度的離地高度', fu('altitude', fl.aglMax_m, 0) + ' ' + un('altitude')],
       ['大氣', fl.mode === 'std' ? '標準大氣，發射場海拔 ' + fu('altitude', fl.launchElev_m, 0) + ' ' + un('altitude') : '當地大氣，氣溫 ' + fu('temp', fl.launchT_C, 1) + ' ' + un('temp') + '，測站氣壓 ' + fu('pressure', fl.stationP_Pa, 2) + ' ' + un('pressure')]
     ];
+    if (state.corr.sect !== 'flat') rows.push(['剖面修正', ({ bevel: '前後緣斜削', wedge: '雙楔形', biconvex: '雙凸形' })[state.corr.sect] + '，等效厚度 ×' + fn(tFactor(), 2)]);
+    if (isNum(state.corr.rootK)) rows.push(['根部剛度比', fn(state.corr.rootK, 2)]);
     if (isNum(state.thermal.finT_C)) rows.push(['鰭片溫度', fu('temp', state.thermal.finT_C, 0) + ' ' + un('temp') + '（G 折減 ×' + fn(effG() / state.G_GPa, 2) + '）']);
     return rows;
   }
@@ -906,7 +992,7 @@
 
   // ================= 總控 =================
   function renderAll() {
-    var jobs = [['out-analysis', renderAnalysis], ['out-traj', renderTraj], ['out-vortex', renderVortex], ['out-mass', renderMass], ['out-cal', renderCal]];
+    var jobs = [['out-analysis', renderAnalysis], ['out-traj', renderTraj], ['out-vortex', renderVortex], ['out-mass', renderMass], ['out-cal', renderCal], ['out-adv', renderAdv]];
     jobs.forEach(function (j) {
       try { j[1](); } catch (e) { var el = $(j[0]); if (el) el.innerHTML = '<section class="paused"><h2>顯示時發生錯誤</h2><p>' + esc(e && e.message ? e.message : e) + '</p></section>'; if (window.console) console.error(e); }
     });
@@ -1041,6 +1127,13 @@
     $('cnFile').addEventListener('change', function (e) { readTextFile(e.target.files && e.target.files[0], importCn, 'cnStatus'); e.target.value = ''; });
     $('btnCnClear').addEventListener('click', function () { state.mass.cnTable = null; $('btnCnClear').hidden = true; setStatusEl('cnStatus', ''); renderAll(); });
     $('btnCalAdd').addEventListener('click', addCalCase);
+    $('btnAdvRun').addEventListener('click', runAdv);
+    document.addEventListener('click', function (e) {
+      if (e.target && e.target.id === 'btnAdvModes' && ui.adv) {
+        var n = 0; ui.adv.r.freqs.forEach(function (f) { if (state.vortex.modes.length < 12) { state.vortex.modes.push(Math.round(f * 10) / 10); n++; } });
+        renderModeList(); schedule(); toolMsg('已把 ' + n + ' 個頻率加入渦流分頁。這是平板模型的值，不含安裝柔度。', 'ok');
+      }
+    });
     $('btnReport').addEventListener('click', makeReport);
     // 建議值的「套用」按鈕（事件委派）
     $('out-analysis').addEventListener('click', function (e) {

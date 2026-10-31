@@ -166,6 +166,22 @@
     return { v: table[n - 1][1], clamped: false };
   }
 
+  // ---------- 外形與安裝修正（工程近似） ----------
+  // 彎曲剛度正比於 ∫t³dx，所以用「立方平均」換算等效厚度比 q = t_eff / t。
+  // 型式：flat 平板；bevel 前後緣斜削（f、g 為斜削長度佔弦長的比例）；wedge 雙楔形；biconvex 雙凸（拋物線）。
+  function sectionFactor(sect, f, g) {
+    if (sect === 'bevel') {
+      f = f || 0; g = g || 0;
+      var m = 1 - 0.75 * (f + g);
+      return m > 0 ? Math.cbrt(m) : NaN;
+    }
+    if (sect === 'wedge') return Math.cbrt(0.25);
+    if (sect === 'biconvex') return Math.cbrt(64 * 36 / 5040);
+    return 1;
+  }
+  // 根部柔度：根部彈簧與鰭片串聯。ratio = 根部剛度 / 鰭片懸臂剛度（null 表示剛性）。Vf ∝ √剛度。
+  function rootStiffnessRatio(ratio) { return ratio === null || ratio === undefined ? 1 : ratio / (1 + ratio); }
+
   // ---------- 安裝與配重 ----------
   // ms: { fins, density_gcc, addMass_g, assemblyX_mm, baseM_g, baseX_mm, cp_mm, od_mm, Cn, lever_mm }
   function massStudy(geom, ms, q_Pa) {
@@ -220,6 +236,6 @@
     planform: planform, flutter: flutter, validateGeometry: validateGeometry,
     evaluatePoint: evaluatePoint, evaluateTrajectory: evaluateTrajectory,
     strouhal: strouhal, crossingSpeed: crossingSpeed, modeBand: modeBand, singleDof: singleDof,
-    massStudy: massStudy, suggestions: suggestions, adiabaticWallT: adiabaticWallT, gTempFactor: gTempFactor, interp: interp
+    massStudy: massStudy, suggestions: suggestions, sectionFactor: sectionFactor, rootStiffnessRatio: rootStiffnessRatio, adiabaticWallT: adiabaticWallT, gTempFactor: gTempFactor, interp: interp
   };
 });
